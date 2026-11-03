@@ -1,15 +1,199 @@
 <!doctype html>
 <html lang="en">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tap Game</title>
-<style>
-  body { font: 20px sans-serif; text-align: center; padding: 40px 15px; }
-  button { font-size: 24px; padding: 18px 28px; }
-</style>
-<h1>Tap Game</h1>
-<p>Score: <span id="score">0</span></p>
-<button onclick="score++; document.querySelector('#score').textContent = score">
-  Tap me!
-</button>
-<script>let score = 0;</script>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Target Tap!</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 24px 16px;
+      font-family: system-ui, sans-serif;
+      text-align: center;
+      color: #242044;
+      background: linear-gradient(160deg, #f8e7ff, #dff7ff);
+    }
+
+    h1 { margin: 8px 0; font-size: clamp(2.4rem, 10vw, 4rem); }
+    #score { font-size: 1.5rem; font-weight: bold; }
+    #message { min-height: 2em; font-weight: bold; }
+
+    #arena {
+      position: relative;
+      width: min(100%, 520px);
+      height: 340px;
+      margin: 18px auto;
+      overflow: hidden;
+      border: 4px solid white;
+      border-radius: 24px;
+      background: #ffffffa8;
+      box-shadow: 0 8px 24px #483c7040;
+    }
+
+    #target {
+      position: absolute;
+      left: 40%;
+      top: 40%;
+      min-width: 90px;
+      min-height: 72px;
+      border: 0;
+      border-radius: 22px;
+      background: #8065ff;
+      color: white;
+      font-size: 2.4rem;
+      box-shadow: 0 5px 0 #5940c7;
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+
+    #target.gold {
+      background: #ffc928;
+      box-shadow: 0 5px 0 #d29300;
+    }
+
+    #start {
+      padding: 14px 28px;
+      border: 0;
+      border-radius: 16px;
+      color: white;
+      background: #ff5c91;
+      font-size: 1.2rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #target:disabled { display: none; }
+    .pop { animation: pop 180ms ease-out; }
+
+    @keyframes pop {
+      50% { transform: scale(1.25) rotate(8deg); }
+    }
+
+    @media (max-width: 400px) {
+      #arena { height: 300px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>🎯 Target Tap!</h1>
+  <p>Catch the target before time runs out!</p>
+  <p id="score">⭐ Score: 0 &nbsp; ×<span id="multiplier">1</span></p>
+  <p>⏱️ Time: <span id="time">30</span></p>
+  <p id="message" aria-live="polite">Ready? Tap Start!</p>
+
+  <div id="arena">
+    <button id="target" aria-label="Tap the target" disabled>🎯</button>
+  </div>
+
+  <button id="start">Start game!</button>
+
+  <script>
+    let score = 0;
+    let multiplier = 1;
+    let secondsLeft = 30;
+    let playing = false;
+    let timer;
+    let audioContext;
+
+    const arena = document.getElementById("arena");
+    const target = document.getElementById("target");
+    const scoreDisplay = document.getElementById("score");
+    const multiplierDisplay = document.getElementById("multiplier");
+    const timeDisplay = document.getElementById("time");
+    const message = document.getElementById("message");
+    const startButton = document.getElementById("start");
+
+    function moveTarget() {
+      const maxX = arena.clientWidth - target.offsetWidth;
+      const maxY = arena.clientHeight - target.offsetHeight;
+      target.style.left = Math.random() * Math.max(0, maxX) + "px";
+      target.style.top = Math.random() * Math.max(0, maxY) + "px";
+    }
+
+    function playDoDo() {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      if (!audioContext) audioContext = new AudioContextClass();
+      audioContext.resume();
+
+      [660, 880].forEach((frequency, index) => {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        const startAt = audioContext.currentTime + index * 0.2;
+
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.001, startAt);
+        gain.gain.exponentialRampToValueAtTime(0.18, startAt + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.18);
+
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(startAt);
+        oscillator.stop(startAt + 0.2);
+      });
+    }
+
+    function endGame() {
+      playing = false;
+      clearInterval(timer);
+      target.disabled = true;
+      startButton.textContent = "Play again!";
+      message.textContent = "Time! Final score: " + score + " 🎉";
+    }
+
+    startButton.addEventListener("click", () => {
+      clearInterval(timer);
+      score = 0;
+      multiplier = 1;
+      secondsLeft = 30;
+      playing = true;
+
+      scoreDisplay.innerHTML = '⭐ Score: 0 &nbsp; ×<span id="multiplier">1</span>';
+      timeDisplay.textContent = secondsLeft;
+      message.textContent = "Go, go, go!";
+      target.disabled = false;
+      target.classList.remove("gold");
+      startButton.textContent = "Playing…";
+      moveTarget();
+
+      timer = setInterval(() => {
+        secondsLeft -= 1;
+        timeDisplay.textContent = secondsLeft;
+        if (secondsLeft <= 0) endGame();
+      }, 1000);
+    });
+
+    target.addEventListener("click", () => {
+      if (!playing) return;
+
+      const isGold = target.classList.contains("gold");
+      score += isGold ? 5 * multiplier : multiplier;
+
+      if (score >= 100 && multiplier === 1) {
+        multiplier = 2;
+        multiplierDisplay.textContent = multiplier;
+        message.textContent = "🏆 100 points! ×2 unlocked! Do do!";
+        playDoDo();
+      } else {
+        message.textContent = isGold ? "✨ Golden bonus! + " + (5 * multiplier) + "!" : "Nice tap!";
+      }
+
+      scoreDisplay.innerHTML =
+        '⭐ Score: ' + score + ' &nbsp; ×<span id="multiplier">' +
+        multiplier + "</span>";
+
+      target.classList.toggle("gold", Math.random() < 0.22);
+      target.textContent = target.classList.contains("gold") ? "🌟" : "🎯";
+
+      target.classList.remove("pop");
+      void target.offsetWidth;
+      target.classList.add("pop");
+      moveTarget();
+    });
+  </script>
+</body>
 </html>
